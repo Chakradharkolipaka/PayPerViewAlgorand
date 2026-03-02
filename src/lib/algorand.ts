@@ -1,12 +1,29 @@
 import algosdk from "algosdk";
 
-const ALGOD_URL =
-  process.env.NEXT_PUBLIC_ALGOD ?? "https://testnet-api.algonode.cloud";
-const INDEXER_URL =
-  process.env.NEXT_PUBLIC_INDEXER ?? "https://testnet-idx.algonode.cloud";
+import { ALGOD_CONFIG, INDEXER_CONFIG } from "@/lib/network";
 
-export const algodClient = new algosdk.Algodv2("", ALGOD_URL, "");
-export const indexerClient = new algosdk.Indexer("", INDEXER_URL, "");
+let _algodClient: algosdk.Algodv2 | null = null;
+let _indexerClient: algosdk.Indexer | null = null;
+
+export function getAlgodClient() {
+  if (_algodClient) return _algodClient;
+  _algodClient = new algosdk.Algodv2(
+    ALGOD_CONFIG.token,
+    ALGOD_CONFIG.server,
+    ALGOD_CONFIG.port
+  );
+  return _algodClient;
+}
+
+export function getIndexerClient() {
+  if (_indexerClient) return _indexerClient;
+  _indexerClient = new algosdk.Indexer(
+    INDEXER_CONFIG.token,
+    INDEXER_CONFIG.server,
+    INDEXER_CONFIG.port
+  );
+  return _indexerClient;
+}
 
 export const MICRO = 1_000_000;
 

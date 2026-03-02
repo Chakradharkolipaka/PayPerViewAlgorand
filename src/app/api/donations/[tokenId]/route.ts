@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { indexerClient } from "@/lib/algorand";
+import { getIndexerClient } from "@/lib/algorand";
 
 export const dynamic = "force-dynamic";
 
@@ -21,12 +21,19 @@ export async function GET(request: Request, { params }: { params: { tokenId: str
       );
     }
 
+    const timeout = <T,>(p: Promise<T>, ms: number) =>
+      Promise.race([
+        p,
+        new Promise<T>((_, reject) =>
+          setTimeout(() => reject(new Error("timeout")), ms)
+        ),
+      ]);
+
     // Fetch payment transactions received by this address.
-    const res = await indexerClient
-      .searchForTransactions()
-      .address(address)
-      .txType("pay")
-      .do();
+    const res = await timeout(
+      getIndexerClient().searchForTransactions().address(address).txType("pay").limit(50).do(),
+      5000
+    );
 
     const txns = (res.transactions ?? []) as any[];
     const donations = txns
@@ -41,7 +48,7 @@ export async function GET(request: Request, { params }: { params: { tokenId: str
 
     return NextResponse.json(donations);
   } catch (error) {
-    console.error("Error fetching donations:", error);
-    return NextResponse.json({ error: "Failed to fetch donations" }, { status: 500 });
+    console.error("API_ERROR", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -1,4 +1,4 @@
-import abi from '../../contracts/abi.json';
+// Central place for shared app constants.
+// (EVM/Hardhat/Solidity artifacts were removed as part of the Algorand-only refactor.)
 
-export const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}` | undefined;
-export const contractAbi = abi;
+export const APP_TAG = "FanFundingAlgorand" as const;

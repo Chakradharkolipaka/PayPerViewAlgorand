@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+// (Removed) Legacy Solidity contract placeholder.
+// This repository is Algorand-only.
 
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-
-
 
 contract NFTDonation is ERC721URIStorage, ReentrancyGuard {
     uint256 private _tokenIdCounter;
@@ -13,12 +12,18 @@ contract NFTDonation is ERC721URIStorage, ReentrancyGuard {
     mapping(uint256 => uint256) public totalDonations;
 
     ///Emitted when a donation is made to a token.
-    event DonationReceived(address indexed donor, uint256 indexed tokenId, uint256 amount);
+    event DonationReceived(
+        address indexed donor,
+        uint256 indexed tokenId,
+        uint256 amount
+    );
 
     constructor() ERC721("NFT Donation", "DONATE") {}
 
     /// Mint a new NFT with metadata hosted off-chain (e.g., IPFS).
-    function mintNFT(string memory tokenURI) external returns (uint256 newTokenId) {
+    function mintNFT(
+        string memory tokenURI
+    ) external returns (uint256 newTokenId) {
         _tokenIdCounter++;
         newTokenId = _tokenIdCounter;
 
@@ -42,10 +47,6 @@ contract NFTDonation is ERC721URIStorage, ReentrancyGuard {
     }
 
     function totalSupply() public view returns (uint256) {
-    return _tokenIdCounter;
-}
-
-
-
-
+        return _tokenIdCounter;
+    }
 }

@@ -4,15 +4,29 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import Link from "next/link";
 import { Home, PlusCircle } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { useContext } from "react";
+import { useContext, useEffect, useRef } from "react";
 import { WalletContext } from "@/app/providers";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
 
 export default function Navbar() {
   const pathname = usePathname();
   const wallet = useContext(WalletContext);
+  const { toast } = useToast();
+  const lastAddr = useRef<string | null>(null);
 
   const short = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+
+  useEffect(() => {
+    if (!wallet) return;
+    if (wallet.address && wallet.address !== lastAddr.current) {
+      toast({
+        title: "Wallet connected",
+        description: `Connected: ${short(wallet.address)} ${wallet.provider === "kibisis" ? "(Kibisis)" : "(Pera)"}`,
+      });
+    }
+    lastAddr.current = wallet.address;
+  }, [toast, wallet]);
 
   return (
     <nav className="hidden md:flex sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
@@ -54,10 +68,52 @@ export default function Navbar() {
           <ThemeToggle />
           {wallet?.address ? (
             <Button variant="outline" onClick={wallet.disconnect}>
-              {short(wallet.address)}
+              {short(wallet.address)} {wallet.provider === "kibisis" ? "(Kibisis)" : "(Pera)"}
             </Button>
           ) : (
-            <Button onClick={wallet?.connect}>Connect Wallet</Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    toast({
+                      title: "Connecting Kibisis...",
+                      description: "Approve the connection in the Kibisis extension.",
+                    });
+                    await wallet?.connect?.("kibisis");
+                  } catch (e) {
+                    toast({
+                      title: "Kibisis connection failed",
+                      description: e instanceof Error ? e.message : String(e),
+                      variant: "destructive",
+                    });
+                  }
+                }}
+                disabled={wallet?.isConnecting}
+              >
+                Kibisis
+              </Button>
+              <Button
+                onClick={async () => {
+                  try {
+                    toast({
+                      title: "Connecting Pera...",
+                      description: "Approve the connection in Pera Wallet.",
+                    });
+                    await wallet?.connect?.("pera");
+                  } catch (e) {
+                    toast({
+                      title: "Pera connection failed",
+                      description: e instanceof Error ? e.message : String(e),
+                      variant: "destructive",
+                    });
+                  }
+                }}
+                disabled={wallet?.isConnecting}
+              >
+                Pera
+              </Button>
+            </div>
           )}
         </div>
       </div>

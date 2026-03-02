@@ -11,8 +11,9 @@ import { Loader2, Upload } from "lucide-react";
 import Image from "next/image";
 import algosdk from "algosdk";
 
-import { algodClient } from "@/lib/algorand";
-import { peraWallet, WalletContext } from "@/app/providers";
+import { getAlgodClient } from "@/lib/algorand";
+import { APP_TAG } from "@/constants";
+import { WalletContext } from "@/app/providers";
 
 export default function MintPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -86,9 +87,10 @@ export default function MintPage() {
 
       toast({
         title: "Minting NFT...",
-        description: "Please confirm the ASA creation transaction in Pera Wallet.",
+        description: "Please confirm the ASA creation transaction in your wallet.",
       });
 
+      const algodClient = getAlgodClient();
       const params = await algodClient.getTransactionParams().do();
       const txn = algosdk.makeAssetCreateTxnWithSuggestedParamsFromObject({
         sender: walletAddress,
@@ -101,11 +103,21 @@ export default function MintPage() {
         suggestedParams: params,
       });
 
-      const signed = await peraWallet.signTransaction(
-        [{ txn, signers: [walletAddress] }] as any
-      );
-        const sendRes = await algodClient.sendRawTransaction(signed).do();
-        const txId = (sendRes as any).txId ?? (sendRes as any).txid;
+      toast({
+        title: "Waiting for wallet signature...",
+        description: "Approve the transaction in Kibisis/Pera to continue.",
+      });
+
+      const signed = await wallet!.signTxn(txn);
+      if (!signed) throw new Error("Transaction signing was cancelled or failed.");
+      const sendRes = await algodClient.sendRawTransaction(signed).do();
+      const txId = (sendRes as any).txId ?? (sendRes as any).txid;
+
+      toast({
+        title: "Transaction submitted",
+        description: `TxID: ${txId}. Waiting for confirmation...`,
+      });
+
       await algosdk.waitForConfirmation(algodClient, txId, 4);
 
       const pending = await algodClient.pendingTransactionInformation(txId).do();
@@ -113,9 +125,14 @@ export default function MintPage() {
 
       // Platform tag for Indexer discovery (0 ALGO self-payment with JSON note)
       if (assetId) {
+        toast({
+          title: "Registering on-chain...",
+          description: "Adding a discovery tag transaction so it appears on the homepage.",
+        });
+
         const notePayload = new TextEncoder().encode(
           JSON.stringify({
-            app: "FanFundingAlgorand",
+            app: APP_TAG,
             assetId,
           })
         );
@@ -128,10 +145,8 @@ export default function MintPage() {
           suggestedParams: params,
         });
 
-        const signedTag = await peraWallet.signTransaction(
-          [{ txn: tagTxn, signers: [walletAddress] }] as any
-        );
-
+        const signedTag = await wallet!.signTxn(tagTxn);
+        if (!signedTag) throw new Error("Tag transaction signing was cancelled or failed.");
         await algodClient.sendRawTransaction(signedTag).do();
       }
 

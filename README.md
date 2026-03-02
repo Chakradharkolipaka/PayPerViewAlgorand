@@ -1,31 +1,42 @@
-# Fan Funding Platform on Etherlink
+# FanFundingAlgorand
 
-A decentralized fan funding platform built on Etherlink where creators can mint NFTs and receive direct funding from their supporters.
+An Algorand TestNet dApp where creators mint ASA-based “NFTs” and supporters donate ALGO directly to creators.
 
-## 🚀 Deployed Contract
+## Tech stack
 
-- **Network**: Etherlink Shadownet (Testnet)
-- **Contract Address**: `0x7F7955562E2674ae9eC9A8c9EF30d41eFf2bb4a0`
-- **Chain ID**: 127823
-- **RPC URL**: https://node.shadownet.etherlink.com
-
-## 🛠️ Tech Stack
-
-- **Frontend**: Next.js 14, React, TailwindCSS, RainbowKit
-- **Smart Contracts**: Solidity 0.8.20, Hardhat
-- **Blockchain**: Etherlink (Tezos Layer 2)
-- **Storage**: IPFS via Pinata
+- Next.js (App Router)
+- Algorand: `algosdk`
+- Wallets: Kibisis + Pera via `@txnlab/use-wallet`
+- Storage: IPFS via Pinata
 
 ## 📦 Installation
 
 ```bash
-npm install --legacy-peer-deps
+npm install
 ```
 
 ## 🔧 Development
 
 ```bash
 npm run dev
+```
+
+## Environment variables
+
+Create `.env.local`:
+
+- `PINATA_JWT` (required for minting)
+
+## Health check
+
+- `GET /api/health` returns:
+
+```json
+{
+	"algod": "ok",
+	"indexer": "ok",
+	"pinata": "configured"
+}
 ```
 
 ## 🌐 Deployment

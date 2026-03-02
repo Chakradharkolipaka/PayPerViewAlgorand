@@ -12,8 +12,8 @@ import { Loader2 } from "lucide-react";
 import algosdk from "algosdk";
 
 import { type NftData } from "../app/page";
-import { WalletContext, peraWallet } from "@/app/providers";
-import { algodClient, fromMicroAlgos, toMicroAlgos } from "@/lib/algorand";
+import { WalletContext } from "@/app/providers";
+import { fromMicroAlgos, getAlgodClient, toMicroAlgos } from "@/lib/algorand";
 
 interface NFTCardProps {
   nft: NftData;
@@ -66,11 +66,17 @@ export default function NFTCard({ nft, onDelete, onDonation, onTotalsChange }: N
 
     try {
       setIsDonating(true);
+      toast({
+        title: "Preparing donation...",
+        description: "Building your ALGO payment transaction.",
+      });
+
       const sender = wallet.address;
       const receiver = owner;
       const amount = toMicroAlgos(Number(donationAmount));
 
-      const params = await algodClient.getTransactionParams().do();
+  const algodClient = getAlgodClient();
+  const params = await algodClient.getTransactionParams().do();
       const txn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
         sender,
         receiver,
@@ -79,9 +85,21 @@ export default function NFTCard({ nft, onDelete, onDonation, onTotalsChange }: N
         suggestedParams: params,
       });
 
-  const signed = await peraWallet.signTransaction([{ txn, signers: [sender] }] as any);
+  toast({
+    title: "Waiting for wallet signature...",
+    description: "Approve the donation in Kibisis/Pera to continue.",
+  });
+
+  const signed = await wallet.signTxn(txn);
+  if (!signed) throw new Error("Transaction signing was cancelled or failed.");
   const sendRes = await algodClient.sendRawTransaction(signed).do();
   const txId = (sendRes as any).txId ?? (sendRes as any).txid;
+
+  toast({
+    title: "Donation submitted",
+    description: `TxID: ${txId}. Waiting for confirmation...`,
+  });
+
   await algosdk.waitForConfirmation(algodClient, txId, 4);
 
       toast({

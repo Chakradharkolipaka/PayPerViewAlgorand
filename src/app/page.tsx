@@ -7,6 +7,7 @@ import NFTCard from "@/components/NFTCard";
 import SkeletonCard from "@/components/SkeletonCard";
 import { Button } from "@/components/ui/button";
 import { fromMicroAlgos } from "@/lib/algorand";
+import { useToast } from "@/components/ui/use-toast";
 
 export interface NftData {
   tokenId: number;
@@ -24,12 +25,48 @@ export default function Home() {
   const [nfts, setNfts] = useState<NftData[]>([]);
   const [hiddenTokenIds, setHiddenTokenIds] = useState<number[]>([]);
   const [donorStats, setDonorStats] = useState<Record<string, DonorStat>>({});
+  const { toast } = useToast();
 
   useEffect(() => {
+    let cancelled = false;
+
+    toast({
+      title: "Loading NFTs...",
+      description: "Fetching on-chain registry from Algorand Indexer.",
+    });
+
     fetch("/api/nfts")
-      .then((res) => res.json())
-      .then((data) => setNfts(data))
-      .catch((e) => console.error("Failed to load NFTs", e));
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          const msg = body?.message || `HTTP ${res.status}`;
+          throw new Error(msg);
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (cancelled) return;
+        setNfts(data);
+        toast({
+          title: "NFTs loaded",
+          description: `Loaded ${Array.isArray(data) ? data.length : 0} NFTs.`,
+        });
+      })
+      .catch((e) => {
+        console.error("Failed to load NFTs", e);
+        toast({
+          title: "Failed to load NFTs",
+          description:
+            e instanceof Error
+              ? e.message
+              : "Indexer request failed. Please refresh and try again.",
+          variant: "destructive",
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const visibleNfts = useMemo(
