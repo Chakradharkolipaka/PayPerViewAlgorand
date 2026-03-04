@@ -1,12 +1,19 @@
 # FanFundingAlgorand
 
-An Algorand TestNet dApp where creators mint ASA-based “NFTs” and supporters donate ALGO directly to creators.
+Fan Funding: Algorand TestNet NFT marketplace where creators mint impact NFTs and fans donate ALGO on-chain.
+
+## Links
+
+- App: https://fan-funding-algorand.vercel.app/
+- GitHub: https://github.com/Chakradharkolipaka/FanFundingAlgorand
+- Wallet (Pera Algo Wallet): https://perawallet.app/
+- TestNet faucet: https://lora.algokit.io/testnet/fund
 
 ## Tech stack
 
 - Next.js (App Router)
 - Algorand: `algosdk`
-- Wallets: Kibisis (browser extension) via `@txnlab/use-wallet`
+- Wallet: Pera Algo Wallet (mobile)
 - Storage: IPFS via Pinata
 
 ## 📦 Installation
@@ -30,10 +37,10 @@ Create `.env.local`:
 
 ## 🔁 Workflow (UI + on-chain)
 
-### 1) Connect wallet (Kibisis)
+### 1) Connect wallet (Pera)
 
-- Click **Kibisis** in the navbar.
-- Approve the connection in the Kibisis extension.
+- Click **Connect Pera** in the navbar.
+- Approve the connection in the Pera mobile app.
 - The connected TestNet account address is shown in the navbar.
 
 ### 2) Mint NFT (ASA)
@@ -49,7 +56,7 @@ On `/mint`:
 	- `assetName = name`
 	- `assetURL = tokenURI`
 	- `total = 1`, `decimals = 0` (NFT-like)
-4. The unsigned transaction is encoded and sent to Kibisis for signing via `@txnlab/use-wallet`.
+4. The unsigned transaction is sent to Pera for signing.
 5. After confirmation, the UI calls the **FanFunding Registry TEAL App**:
 	- App call args: `"register"`, `assetId`
 	- Foreign assets: `[assetId]`
@@ -65,7 +72,7 @@ On `/`:
 ### 4) Donate / fund
 
 - The **Fan Donate** button builds a normal ALGO payment txn to the creator address.
-- Kibisis signs, the app submits, then confirmation updates the UI.
+- Pera signs, the app submits, then confirmation updates the UI.
 
 ## Health check
 
