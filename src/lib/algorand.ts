@@ -1,17 +1,15 @@
 import algosdk from "algosdk";
 
-import { ALGOD_CONFIG, INDEXER_CONFIG } from "@/lib/network";
+import { ALGOD_CONFIG, INDEXER_CONFIG } from "./network.ts";
 
 let _algodClient: algosdk.Algodv2 | null = null;
 let _indexerClient: algosdk.Indexer | null = null;
 
 export function getAlgodClient() {
   if (_algodClient) return _algodClient;
-  _algodClient = new algosdk.Algodv2(
-    ALGOD_CONFIG.token,
-    ALGOD_CONFIG.server,
-    ALGOD_CONFIG.port
-  );
+  // IMPORTANT: create lazily (no module-root side effects) and be explicit
+  // about the TestNet endpoint for maximum runtime predictability.
+  _algodClient = new algosdk.Algodv2("", "https://testnet-api.algonode.cloud", "");
   return _algodClient;
 }
 

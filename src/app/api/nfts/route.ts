@@ -1,10 +1,16 @@
 import { getIndexerClient } from "@/lib/algorand";
-import { APP_TAG } from "@/constants";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
+    const appIdStr = process.env.NEXT_PUBLIC_REGISTRY_APP_ID;
+    const appId = appIdStr ? Number(appIdStr) : NaN;
+    if (!Number.isFinite(appId) || appId <= 0) {
+      // If not configured, return empty list (keeps app usable) 
+      return Response.json([]);
+    }
+
     const indexerClient = getIndexerClient();
 
     const timeout = <T,>(p: Promise<T>, ms: number) =>
@@ -15,40 +21,29 @@ export async function GET() {
         ),
       ]);
 
-    // Strict limits for demo stability
-    const MAX_TXNS = 50;
-    const notePrefix = new TextEncoder().encode(`{"app":"${APP_TAG}"`);
-
-    let response: any;
+    // Read registry from app global state
+    let appInfo: any;
     try {
-      response = await timeout(
-        indexerClient.searchForTransactions().limit(MAX_TXNS).notePrefix(notePrefix).do(),
-        5000
-      );
+      appInfo = await timeout(indexerClient.lookupApplications(appId).do(), 5000);
     } catch {
-      // Per requirements: indexer failure returns empty array (never 500)
       return Response.json([]);
     }
 
+    const globalState: any[] = appInfo?.application?.params?.globalState ?? appInfo?.application?.params?.["global-state"] ?? [];
+
     const assetIds: number[] = [];
-    for (const txn of response.transactions ?? []) {
-      if (!txn.note) continue;
-      try {
-        const noteRaw = txn.note as unknown;
-        const noteJson =
-          typeof noteRaw === "string"
-            ? Buffer.from(noteRaw, "base64").toString()
-            : Buffer.from(noteRaw as Uint8Array).toString();
-        const decoded = JSON.parse(noteJson);
-        if (decoded.app === APP_TAG && decoded.assetId) assetIds.push(Number(decoded.assetId));
-      } catch {
-        // ignore
-      }
+    for (const entry of globalState) {
+      const keyB64 = entry.key as string;
+      if (!keyB64) continue;
+      const keyBytes = Buffer.from(keyB64, "base64");
+      // keys are: "a:" + itob(assetId)
+      if (keyBytes.length !== 2 + 8) continue;
+      if (keyBytes[0] !== 0x61 || keyBytes[1] !== 0x3a) continue; // 'a:'
+      const assetId = Number(keyBytes.readBigUInt64BE(2));
+      if (Number.isFinite(assetId) && assetId > 0) assetIds.push(assetId);
     }
 
-    const uniqueAssetIds = [...new Set(assetIds)]
-      .filter((n) => Number.isFinite(n))
-      .slice(0, 50);
+    const uniqueAssetIds = [...new Set(assetIds)].slice(0, 50);
 
     const nfts: any[] = [];
     for (const id of uniqueAssetIds) {

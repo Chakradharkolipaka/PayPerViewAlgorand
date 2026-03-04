@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { Providers } from "./providers";
 import Navbar from "@/components/Navbar";
 import PageTransitionWrapper from "@/components/PageTransitionWrapper";
 import { ThemeProvider } from "@/app/theme-provider";
@@ -29,14 +28,12 @@ export default function RootLayout({
           enableSystem={false}
           disableTransitionOnChange
         >
-          <Providers>
-            <div className="min-h-screen bg-background dark:bg-gradient-to-b dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
-              <Navbar />
-              <PageTransitionWrapper>{children}</PageTransitionWrapper>
-              <Toaster />
-              <BottomNav />
-            </div>
-          </Providers>
+          <div className="min-h-screen bg-background dark:bg-gradient-to-b dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+            <Navbar />
+            <PageTransitionWrapper>{children}</PageTransitionWrapper>
+            <Toaster />
+            <BottomNav />
+          </div>
         </ThemeProvider>
       </body>
     </html>

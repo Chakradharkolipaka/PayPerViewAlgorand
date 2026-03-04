@@ -12,8 +12,9 @@ import { Loader2 } from "lucide-react";
 import algosdk from "algosdk";
 
 import { type NftData } from "../app/page";
-import { WalletContext } from "@/app/providers";
 import { fromMicroAlgos, getAlgodClient, toMicroAlgos } from "@/lib/algorand";
+import { peraWallet, reconnectOnce } from "@/lib/peraWallet";
+import { usePeraAccount } from "@/hooks/usePeraAccount";
 
 interface NFTCardProps {
   nft: NftData;
@@ -34,9 +35,12 @@ export default function NFTCard({ nft, onDelete, onDonation, onTotalsChange }: N
   const [showConfetti, setShowConfetti] = useState(false);
   const [events, setEvents] = useState<any[]>([]);
   const [isDonating, setIsDonating] = useState(false);
+  const { account } = usePeraAccount();
   const { toast } = useToast();
 
-  const wallet = useContext(WalletContext);
+  useEffect(() => {
+    void reconnectOnce();
+  }, []);
 
   const handleDonate = async () => {
     if (!donationAmount || Number(donationAmount) <= 0) {
@@ -55,10 +59,10 @@ export default function NFTCard({ nft, onDelete, onDonation, onTotalsChange }: N
       });
       return;
     }
-    if (!wallet?.address) {
+    if (!account) {
       toast({
         title: "Wallet Not Connected",
-        description: "Please connect your wallet first.",
+        description: "Please connect Pera Wallet first.",
         variant: "destructive",
       });
       return;
@@ -71,7 +75,7 @@ export default function NFTCard({ nft, onDelete, onDonation, onTotalsChange }: N
         description: "Building your ALGO payment transaction.",
       });
 
-      const sender = wallet.address;
+    const sender = account;
       const receiver = owner;
       const amount = toMicroAlgos(Number(donationAmount));
 
@@ -87,12 +91,19 @@ export default function NFTCard({ nft, onDelete, onDonation, onTotalsChange }: N
 
   toast({
     title: "Waiting for wallet signature...",
-    description: "Approve the donation in Kibisis/Pera to continue.",
+    description: "Approve the donation in Pera Wallet to continue.",
   });
 
-  const signed = await wallet.signTxn(txn);
-  if (!signed) throw new Error("Transaction signing was cancelled or failed.");
-  const sendRes = await algodClient.sendRawTransaction(signed).do();
+      const txnGroup = [
+        {
+          txn,
+          signers: [sender],
+        },
+      ];
+  const signedTxns = await peraWallet.signTransaction([txnGroup]);
+      if (!signedTxns?.[0]) throw new Error("Transaction signing was cancelled or failed.");
+
+      const sendRes = await algodClient.sendRawTransaction(signedTxns[0]).do();
   const txId = (sendRes as any).txId ?? (sendRes as any).txid;
 
   toast({

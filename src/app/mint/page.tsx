@@ -12,8 +12,8 @@ import Image from "next/image";
 import algosdk from "algosdk";
 
 import { getAlgodClient } from "@/lib/algorand";
-import { APP_TAG } from "@/constants";
-import { WalletContext } from "@/app/providers";
+import { connectPera, peraWallet } from "@/lib/peraWallet";
+import { usePeraAccount } from "@/hooks/usePeraAccount";
 
 export default function MintPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -23,7 +23,13 @@ export default function MintPage() {
   const [isMinting, setIsMinting] = useState(false);
 
   const { toast } = useToast();
-  const wallet = useContext(WalletContext);
+  const { account } = usePeraAccount();
+
+  const connectWallet = useCallback(async () => {
+    const accounts = await connectPera();
+    const addr = accounts?.[0] ?? null;
+    if (!addr) throw new Error("Connected wallet returned no accounts.");
+  }, []);
 
   const handleFileChange = (files: FileList | null) => {
     if (files && files[0]) {
@@ -48,16 +54,8 @@ export default function MintPage() {
       });
       return;
     }
-
-    const walletAddress = wallet?.address;
-    if (!walletAddress) {
-      toast({
-        title: "Wallet Not Connected",
-        description: "Please connect your wallet first using the Connect Wallet button.",
-        variant: "destructive",
-      });
-      return;
-    }
+  if (!account) throw new Error("Wallet not connected");
+  if (!algosdk.isValidAddress(account)) throw new Error("Invalid wallet address");
 
     try {
       setIsMinting(true);
@@ -82,73 +80,106 @@ export default function MintPage() {
         throw new Error(errData.error || `Upload failed with status ${uploadRes.status}`);
       }
 
-      const { tokenURI } = (await uploadRes.json()) as { tokenURI?: string };
-      if (!tokenURI) throw new Error("Failed to get token URI from upload");
+    const { tokenURI } = (await uploadRes.json()) as { tokenURI?: string };
+    if (!tokenURI) throw new Error("Failed to get token URI from upload");
 
       toast({
         title: "Minting NFT...",
         description: "Please confirm the ASA creation transaction in your wallet.",
       });
 
-      const algodClient = getAlgodClient();
-      const params = await algodClient.getTransactionParams().do();
+    const algod = getAlgodClient();
+    const suggestedParams = await algod.getTransactionParams().do();
+    suggestedParams.flatFee = true;
+    // Strict rule: flat fee 1000 microAlgos
+    // Note: algosdk v3 types fee as bigint.
+    (suggestedParams as any).fee = 1000n;
+
+      // IMPORTANT: create a real algosdk.Transaction via factory. Do not serialize/clone/toByte.
       const txn = algosdk.makeAssetCreateTxnWithSuggestedParamsFromObject({
-        sender: walletAddress,
+        sender: account,
         total: 1,
         decimals: 0,
-        assetName: "DonationNFT",
-        unitName: "DNFT",
+        assetName: name,
+        unitName: "NFT",
         assetURL: tokenURI,
         defaultFrozen: false,
-        suggestedParams: params,
+        suggestedParams,
       });
+
+      console.log("Mint txn prepared:", txn);
+
+  // Wallet abstraction signs Transaction objects (Pera-first), returns signed bytes.
 
       toast({
         title: "Waiting for wallet signature...",
-        description: "Approve the transaction in Kibisis/Pera to continue.",
+        description: "Approve the transaction in Pera Wallet to continue.",
       });
 
-      const signed = await wallet!.signTxn(txn);
-      if (!signed) throw new Error("Transaction signing was cancelled or failed.");
-      const sendRes = await algodClient.sendRawTransaction(signed).do();
-      const txId = (sendRes as any).txId ?? (sendRes as any).txid;
+      const txnGroup = [
+        {
+          txn,
+          signers: [account],
+        },
+      ];
+
+  const signedTxns = await peraWallet.signTransaction([txnGroup]);
+      if (!signedTxns?.[0]) throw new Error("Signing failed");
+
+      const sendRes = await algod.sendRawTransaction(signedTxns[0]).do();
+      const txId = (sendRes as any).txId ?? (sendRes as any).txid ?? txn.txID().toString();
 
       toast({
         title: "Transaction submitted",
         description: `TxID: ${txId}. Waiting for confirmation...`,
       });
 
-      await algosdk.waitForConfirmation(algodClient, txId, 4);
+      const confirmation = await algosdk.waitForConfirmation(algod, txId, 4);
+      console.log("Mint success", txId);
 
-      const pending = await algodClient.pendingTransactionInformation(txId).do();
-      const assetId = (pending as any).assetIndex ?? (pending as any)["asset-index"];
-
-      // Platform tag for Indexer discovery (0 ALGO self-payment with JSON note)
-      if (assetId) {
-        toast({
-          title: "Registering on-chain...",
-          description: "Adding a discovery tag transaction so it appears on the homepage.",
-        });
-
-        const notePayload = new TextEncoder().encode(
-          JSON.stringify({
-            app: APP_TAG,
-            assetId,
-          })
-        );
-
-        const tagTxn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
-          sender: walletAddress,
-          receiver: walletAddress,
-          amount: 0,
-          note: notePayload,
-          suggestedParams: params,
-        });
-
-        const signedTag = await wallet!.signTxn(tagTxn);
-        if (!signedTag) throw new Error("Tag transaction signing was cancelled or failed.");
-        await algodClient.sendRawTransaction(signedTag).do();
+      const assetId = (confirmation as any)["asset-index"];
+      if (!assetId || typeof assetId !== "number") {
+        console.error("ASSET_ID_UNDEFINED", confirmation);
+        throw new Error("Mint failed: asset ID not returned");
       }
+
+      // Registry App Call
+      const appIdStr = process.env.NEXT_PUBLIC_REGISTRY_APP_ID;
+      const appId = appIdStr ? Number(appIdStr) : NaN;
+      if (!Number.isFinite(appId) || appId <= 0) {
+        throw new Error("Missing NEXT_PUBLIC_REGISTRY_APP_ID. Deploy the registry app and set it in .env.local.");
+      }
+
+      toast({
+        title: "Registering on-chain...",
+        description: "Confirm the registry registration transaction in Pera Wallet.",
+      });
+
+      if (typeof assetId !== "number") {
+        throw new Error("Invalid assetId before registry call");
+      }
+
+      const appCallTxn = algosdk.makeApplicationNoOpTxnFromObject({
+        sender: account,
+        appIndex: appId,
+        appArgs: [
+          new TextEncoder().encode("register"),
+          algosdk.encodeUint64(assetId),
+        ],
+        suggestedParams,
+      });
+
+      const appTxnGroup = [
+        {
+          txn: appCallTxn,
+          signers: [account],
+        },
+      ];
+      const signedApp = await peraWallet.signTransaction([appTxnGroup]);
+      if (!signedApp?.[0]) throw new Error("Registry signing failed");
+
+      await algod.sendRawTransaction(signedApp[0]).do();
+      await algosdk.waitForConfirmation(algod, appCallTxn.txID().toString(), 4);
 
       toast({
         title: "Success!",
@@ -159,12 +190,18 @@ export default function MintPage() {
       setPreviewUrl(null);
       setName("");
       setDescription("");
-    } catch (error) {
+    } catch (err) {
+      if (!(globalThis as any).__MINT_ERR_LOGGED__) {
+        (globalThis as any).__MINT_ERR_LOGGED__ = true;
+        console.error("MINT_ERROR", err);
+      }
+
       toast({
         title: "Minting Failed",
-        description: error instanceof Error ? error.message : String(error),
+        description: err instanceof Error ? err.message : String(err),
         variant: "destructive",
       });
+      throw err;
     } finally {
       setIsMinting(false);
     }
@@ -183,6 +220,34 @@ export default function MintPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm text-muted-foreground">
+                {account ? `Connected: ${account.slice(0, 6)}...${account.slice(-4)}` : "Wallet: not connected"}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    await connectWallet();
+                    toast({
+                      title: "Connected",
+                      description: "Pera Wallet connected.",
+                    });
+                  } catch (e) {
+                    toast({
+                      title: "Connection failed",
+                      description: e instanceof Error ? e.message : String(e),
+                      variant: "destructive",
+                    });
+                  }
+                }}
+                disabled={isProcessing}
+              >
+                {account ? "Reconnect" : "Connect Pera"}
+              </Button>
+            </div>
+
             <div
               className="border-2 border-dashed border-muted-foreground/50 rounded-lg p-8 text-center cursor-pointer hover:bg-accent transition-colors"
               onDragOver={(e) => e.preventDefault()}
@@ -230,13 +295,13 @@ export default function MintPage() {
               />
             </div>
 
-            {!wallet?.address && (
+            {!account && (
               <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 text-sm text-yellow-800 dark:text-yellow-200">
                 ⚠️ Please connect your wallet using the "Connect Wallet" button in the navigation bar.
               </div>
             )}
 
-            <Button onClick={handleMint} disabled={isProcessing || !wallet?.address} className="w-full">
+            <Button onClick={handleMint} disabled={isProcessing || !account} className="w-full">
               {isProcessing ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
