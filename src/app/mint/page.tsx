@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Loader2, Upload } from "lucide-react";
 import Image from "next/image";
 import algosdk from "algosdk";
+import { useRouter } from "next/navigation";
 
 import { getAlgodClient } from "@/lib/algorand";
 import { connectPera, peraWallet } from "@/lib/peraWallet";
@@ -24,6 +25,7 @@ export default function MintPage() {
 
   const { toast } = useToast();
   const { account } = usePeraAccount();
+  const router = useRouter();
 
   const connectWallet = useCallback(async () => {
     const accounts = await connectPera();
@@ -134,14 +136,26 @@ export default function MintPage() {
         description: `TxID: ${txId}. Waiting for confirmation...`,
       });
 
-      const confirmation = await algosdk.waitForConfirmation(algod, txId, 4);
-      console.log("Mint success", txId);
+      // STEP 1 — FIX CONFIRMATION HANDLING (assetIndex + BigInt-safe)
+      const confirmedTxn = await algosdk.waitForConfirmation(algod, txId, 4);
 
-      const assetId = (confirmation as any)["asset-index"];
-      if (!assetId || typeof assetId !== "number") {
-        console.error("ASSET_ID_UNDEFINED", confirmation);
-        throw new Error("Mint failed: asset ID not returned");
+      if (confirmedTxn.poolError && confirmedTxn.poolError.length > 0) {
+        throw new Error(`Transaction failed: ${confirmedTxn.poolError}`);
       }
+
+      const assetIdRaw = confirmedTxn.assetIndex;
+
+      if (assetIdRaw === undefined || assetIdRaw === null) {
+        throw new Error("Mint failed: asset ID missing from confirmation");
+      }
+
+      const assetId = Number(assetIdRaw);
+
+      if (Number.isNaN(assetId)) {
+        throw new Error("Mint failed: invalid asset ID format");
+      }
+
+      console.log("Mint successful. Asset ID:", assetId);
 
       // Registry App Call
       const appIdStr = process.env.NEXT_PUBLIC_REGISTRY_APP_ID;
@@ -154,10 +168,6 @@ export default function MintPage() {
         title: "Registering on-chain...",
         description: "Confirm the registry registration transaction in Pera Wallet.",
       });
-
-      if (typeof assetId !== "number") {
-        throw new Error("Invalid assetId before registry call");
-      }
 
       const appCallTxn = algosdk.makeApplicationNoOpTxnFromObject({
         sender: account,
@@ -181,9 +191,16 @@ export default function MintPage() {
       await algod.sendRawTransaction(signedApp[0]).do();
       await algosdk.waitForConfirmation(algod, appCallTxn.txID().toString(), 4);
 
+      // STEP 5 — HANDLE INDEXER DELAY
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      // Force a refresh of the on-chain list (Home page fetches /api/nfts).
+      // This avoids relying on any stale in-memory cache.
+      router.refresh();
+
       toast({
         title: "Success!",
-        description: assetId ? `NFT ASA created. Asset ID: ${assetId}` : `Mint submitted. TxID: ${txId}`,
+        description: `NFT ASA created. Asset ID: ${assetId}`,
       });
 
       setFile(null);
