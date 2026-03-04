@@ -1,5 +1,6 @@
 "use client";
 
+import algosdk from "algosdk";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
@@ -9,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { fromMicroAlgos } from "@/lib/algorand";
 import { useToast } from "@/components/ui/use-toast";
 import { usePeraAccount } from "@/hooks/usePeraAccount";
-import { useNFTStore } from "@/hooks/useNFTStore";
 
 export interface NftData {
   tokenId: number;
@@ -29,12 +29,13 @@ export default function Home() {
   const [donorStats, setDonorStats] = useState<Record<string, DonorStat>>({});
   const { toast } = useToast();
   const { account } = usePeraAccount();
-  const { isLoading, error, nfts: chainNfts, refreshNFTs } = useNFTStore();
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
     if (!account) {
+      console.warn("Account null, skipping fetch");
       setNfts([]);
       return () => {
         cancelled = true;
@@ -46,48 +47,139 @@ export default function Home() {
       description: "Fetching your on-chain assets from Algorand Indexer.",
     });
 
-    refreshNFTs(account)
-      .then(() => {
+    const fetchNFTs = async () => {
+      setIsLoading(true);
+      try {
+        // STEP 1 — ADD NETWORK DIAGNOSTIC BLOCK
+        console.log("=== NFT FETCH DEBUG START ===");
+        console.log("Connected account:", account);
+
+        const algod = new algosdk.Algodv2("", "https://testnet-api.algonode.cloud", "");
+        const status = await algod.status().do();
+        console.log("Algod last round:", (status as any)["last-round"]);
+
+        const indexer = new algosdk.Indexer("", "https://testnet-idx.algonode.cloud", "");
+
+        // STEP 2 — LOG RAW INDEXER RESPONSE
+        const res = await indexer.lookupAccountAssets(account).do();
+        console.log("Raw indexer response:", res);
+        console.log("Total assets returned:", (res as any)?.assets?.length);
+
+        const assets = (res as any)?.assets ?? [];
+
+        // STEP 3 — REMOVE ALL FILTERS TEMPORARILY
+        const nftAssets = assets;
+        console.log("Assets BEFORE filtering:", nftAssets);
+
+        // STEP 4 — LOG EACH ASSET DETAILS
+        nftAssets.forEach((a: any) => {
+          console.log("Asset:", {
+            assetId: a?.["asset-id"] ?? a?.assetId,
+            amount: a?.amount,
+            frozen: a?.["is-frozen"] ?? a?.isFrozen,
+          });
+        });
+
+        const detailed = await Promise.all(
+          nftAssets.map(async (holding: any) => {
+            const rawAssetId = holding?.["asset-id"] ?? holding?.assetId;
+
+            // Indexer holdings may be returned as bigint in newer SDKs.
+            const assetId =
+              typeof rawAssetId === "bigint"
+                ? Number(rawAssetId)
+                : Number(rawAssetId);
+
+            console.log("Holding asset-id raw:", rawAssetId, "normalized:", assetId);
+
+            if (!Number.isFinite(assetId) || assetId <= 0) {
+              console.error(
+                "Invalid asset-id encountered (skipping holding):",
+                holding,
+                "keys:",
+                holding && typeof holding === "object" ? Object.keys(holding) : holding
+              );
+              return null;
+            }
+
+            const assetInfo = await indexer.lookupAssetByID(assetId).do();
+            // STEP 5 — LOG FULL ASSET PARAMS
+            console.log("Asset info for", holding?.["asset-id"], assetInfo);
+
+            const params = (assetInfo as any)?.asset?.params ?? {};
+
+            // STEP 11 — CHECK DECIMALS
+            if (params?.decimals !== 0) {
+              console.warn("Not an NFT (decimals != 0):", params?.decimals);
+            }
+
+            let metadata: any | null = null;
+
+            // STEP 6 — HANDLE IPFS URL NORMALIZATION
+            let url = params?.url ? String(params.url) : undefined;
+            if (url?.startsWith("ipfs://")) {
+              url = url.replace("ipfs://", "https://gateway.pinata.cloud/ipfs/");
+            }
+
+            console.log("Metadata URL:", url);
+
+            if (url) {
+              try {
+                const metaRes = await fetch(url, { cache: "no-store" });
+                console.log("Metadata response status:", metaRes.status);
+                metadata = await metaRes.json();
+              } catch (err) {
+                console.error("Metadata fetch failed:", err);
+                metadata = null;
+              }
+            }
+
+            return {
+              tokenId: assetId,
+              metadata: metadata ?? {
+                name: params?.name,
+                image: params?.url,
+              },
+              owner: account,
+              totalDonations: 0n,
+            } as NftData;
+          })
+        );
+
+        const cleanedDetailed = detailed.filter(Boolean) as NftData[];
+
         if (cancelled) return;
+        setNfts(cleanedDetailed);
+
+        // STEP 7 — VERIFY STATE IS SET
+  console.log("Final NFT state set:", cleanedDetailed);
+
+        console.log("=== NFT FETCH DEBUG END ===");
+
         toast({
           title: "NFTs loaded",
-          description: `Loaded ${chainNfts.length} NFTs.`,
+          description: `Loaded ${cleanedDetailed.length} NFTs.`,
         });
-      })
-      .catch((e) => {
+      } catch (e) {
+        if (cancelled) return;
         console.error("Failed to load account NFTs", e);
-      });
+        toast({
+          title: "Failed to load NFTs",
+          description: e instanceof Error ? e.message : String(e),
+          variant: "destructive",
+        });
+        setNfts([]);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    void fetchNFTs();
 
     return () => {
       cancelled = true;
     };
-  }, [account, refreshNFTs]);
-
-  useEffect(() => {
-    if (!account) return;
-    if (error) {
-      toast({
-        title: "Failed to load NFTs",
-        description: error,
-        variant: "destructive",
-      });
-    }
-  }, [account, error, toast]);
-
-  useEffect(() => {
-    // Merge chain NFTs into the existing UI model.
-    // Registry / marketplace fields can be layered in later via `registryData`.
-    const mapped: NftData[] = chainNfts.map((n) => ({
-      tokenId: n.assetId,
-      metadata: n.metadata ?? {
-        name: n.params?.name,
-        image: n.params?.url,
-      },
-      owner: n.owner,
-      totalDonations: 0n,
-    }));
-    setNfts(mapped);
-  }, [chainNfts]);
+  }, [account, toast]);
 
   const visibleNfts = useMemo(
     () => nfts.filter((nft) => !hiddenTokenIds.includes(nft.tokenId)),
@@ -136,6 +228,12 @@ export default function Home() {
 
   return (
     <main className="container mx-auto px-4 py-10 space-y-10">
+      {/* STEP 8 — VERIFY RENDERING IS NOT BLOCKED */}
+      <pre className="text-xs opacity-70 whitespace-pre-wrap break-words">
+        Account: {String(account)}
+        {"\n"}NFT Count: {nfts.length}
+      </pre>
+
       <section className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-3">Explore impact NFTs</h1>

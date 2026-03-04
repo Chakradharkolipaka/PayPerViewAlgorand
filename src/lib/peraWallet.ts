@@ -8,6 +8,8 @@ type Listener = (accounts: string[] | null) => void;
 // IMPORTANT: Keep this module client-only.
 export const peraWallet = new PeraWalletConnect();
 
+const LS_KEY = "ff.pera.accounts";
+
 let accounts: string[] | null = null;
 let listeners: Set<Listener> | null = null;
 let reconnectStarted = false;
@@ -19,6 +21,18 @@ function ensureListeners() {
 
 function publish(next: string[] | null) {
   accounts = next;
+
+  // Persist most-recent session for fast hydration on refresh.
+  // WalletConnect session restore can be async; this keeps UI responsive.
+  try {
+    if (typeof window !== "undefined") {
+      if (next?.length) localStorage.setItem(LS_KEY, JSON.stringify(next));
+      else localStorage.removeItem(LS_KEY);
+    }
+  } catch {
+    // ignore storage errors
+  }
+
   for (const l of ensureListeners()) l(accounts);
 }
 
@@ -26,7 +40,25 @@ export function getAccountsSnapshot(): string[] | null {
   return accounts;
 }
 
+function hydrateFromStorageOnce() {
+  if (accounts !== null) return;
+  try {
+    if (typeof window === "undefined") return;
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.every((x) => typeof x === "string") && parsed.length) {
+      accounts = parsed;
+    }
+  } catch {
+    // ignore
+  }
+}
+
 export function subscribeAccounts(listener: Listener): () => void {
+  // Hydrate immediately so pages depending on `account` can fetch without waiting
+  // for reconnectSession to resolve.
+  hydrateFromStorageOnce();
   ensureListeners().add(listener);
   return () => {
     listeners?.delete(listener);
