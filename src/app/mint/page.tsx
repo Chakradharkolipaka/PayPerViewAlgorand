@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation";
 import { getAlgodClient } from "@/lib/algorand";
 import { connectPera, peraWallet } from "@/lib/peraWallet";
 import { usePeraAccount } from "@/hooks/usePeraAccount";
+import { useNFTStore } from "@/hooks/useNFTStore";
 
 export default function MintPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -26,6 +27,7 @@ export default function MintPage() {
   const { toast } = useToast();
   const { account } = usePeraAccount();
   const router = useRouter();
+  const { refreshNFTs } = useNFTStore();
 
   const connectWallet = useCallback(async () => {
     const accounts = await connectPera();
@@ -194,9 +196,13 @@ export default function MintPage() {
       // STEP 5 — HANDLE INDEXER DELAY
       await new Promise((resolve) => setTimeout(resolve, 3000));
 
-      // Force a refresh of the on-chain list (Home page fetches /api/nfts).
-      // This avoids relying on any stale in-memory cache.
-      router.refresh();
+  // STEP 4 — FORCE UI REFRESH AFTER MINT (indexer source-of-truth)
+  // Refresh the global client-side NFT store. This makes the minted ASA
+  // appear immediately in the UI without relying on navigation revalidation.
+  await refreshNFTs(account);
+
+  // Optional: still refresh route cache for any server components.
+  router.refresh();
 
       toast({
         title: "Success!",

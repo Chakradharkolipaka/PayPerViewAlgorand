@@ -8,6 +8,8 @@ import SkeletonCard from "@/components/SkeletonCard";
 import { Button } from "@/components/ui/button";
 import { fromMicroAlgos } from "@/lib/algorand";
 import { useToast } from "@/components/ui/use-toast";
+import { usePeraAccount } from "@/hooks/usePeraAccount";
+import { useNFTStore } from "@/hooks/useNFTStore";
 
 export interface NftData {
   tokenId: number;
@@ -26,48 +28,66 @@ export default function Home() {
   const [hiddenTokenIds, setHiddenTokenIds] = useState<number[]>([]);
   const [donorStats, setDonorStats] = useState<Record<string, DonorStat>>({});
   const { toast } = useToast();
+  const { account } = usePeraAccount();
+  const { isLoading, error, nfts: chainNfts, refreshNFTs } = useNFTStore();
 
   useEffect(() => {
     let cancelled = false;
 
+    if (!account) {
+      setNfts([]);
+      return () => {
+        cancelled = true;
+      };
+    }
+
     toast({
-      title: "Loading NFTs...",
-      description: "Fetching on-chain registry from Algorand Indexer.",
+      title: "Loading your NFTs...",
+      description: "Fetching your on-chain assets from Algorand Indexer.",
     });
 
-    fetch("/api/nfts")
-      .then(async (res) => {
-        if (!res.ok) {
-          const body = await res.json().catch(() => null);
-          const msg = body?.message || `HTTP ${res.status}`;
-          throw new Error(msg);
-        }
-        return res.json();
-      })
-      .then((data) => {
+    refreshNFTs(account)
+      .then(() => {
         if (cancelled) return;
-        setNfts(data);
         toast({
           title: "NFTs loaded",
-          description: `Loaded ${Array.isArray(data) ? data.length : 0} NFTs.`,
+          description: `Loaded ${chainNfts.length} NFTs.`,
         });
       })
       .catch((e) => {
-        console.error("Failed to load NFTs", e);
-        toast({
-          title: "Failed to load NFTs",
-          description:
-            e instanceof Error
-              ? e.message
-              : "Indexer request failed. Please refresh and try again.",
-          variant: "destructive",
-        });
+        console.error("Failed to load account NFTs", e);
       });
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [account, refreshNFTs]);
+
+  useEffect(() => {
+    if (!account) return;
+    if (error) {
+      toast({
+        title: "Failed to load NFTs",
+        description: error,
+        variant: "destructive",
+      });
+    }
+  }, [account, error, toast]);
+
+  useEffect(() => {
+    // Merge chain NFTs into the existing UI model.
+    // Registry / marketplace fields can be layered in later via `registryData`.
+    const mapped: NftData[] = chainNfts.map((n) => ({
+      tokenId: n.assetId,
+      metadata: n.metadata ?? {
+        name: n.params?.name,
+        image: n.params?.url,
+      },
+      owner: n.owner,
+      totalDonations: 0n,
+    }));
+    setNfts(mapped);
+  }, [chainNfts]);
 
   const visibleNfts = useMemo(
     () => nfts.filter((nft) => !hiddenTokenIds.includes(nft.tokenId)),
@@ -112,7 +132,7 @@ export default function Home() {
     []
   );
 
-  const isLoading = false;
+  const isPageLoading = !!account && isLoading;
 
   return (
     <main className="container mx-auto px-4 py-10 space-y-10">
@@ -148,7 +168,7 @@ export default function Home() {
           </Button>
         </div>
 
-        {isLoading ? (
+        {isPageLoading ? (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, idx) => (
               <SkeletonCard key={idx} />
