@@ -8,7 +8,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2, Upload } from "lucide-react";
-import Image from "next/image";
 import algosdk from "algosdk";
 import { useRouter } from "next/navigation";
 
@@ -16,6 +15,7 @@ import { getAlgodClient } from "@/lib/algorand";
 import { connectPera, peraWallet } from "@/lib/peraWallet";
 import { usePeraAccount } from "@/hooks/usePeraAccount";
 import { useNFTStore } from "@/hooks/useNFTStore";
+import { MAX_VIDEO_SIZE_BYTES } from "@/constants";
 
 export default function MintPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -38,6 +38,27 @@ export default function MintPage() {
   const handleFileChange = (files: FileList | null) => {
     if (files && files[0]) {
       const selectedFile = files[0];
+
+      // Validate video type
+      if (!selectedFile.type.startsWith("video/")) {
+        toast({
+          title: "Invalid file type",
+          description: "Please select a video file (MP4, WebM, MOV, etc.).",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Validate file size (2 MB)
+      if (selectedFile.size > MAX_VIDEO_SIZE_BYTES) {
+        toast({
+          title: "File too large",
+          description: `Video must be under ${MAX_VIDEO_SIZE_BYTES / (1024 * 1024)}MB. Your file is ${(selectedFile.size / (1024 * 1024)).toFixed(2)}MB.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
       setFile(selectedFile);
       setPreviewUrl(URL.createObjectURL(selectedFile));
     }
@@ -53,7 +74,7 @@ export default function MintPage() {
     if (!file || !name || !description) {
       toast({
         title: "Error",
-        description: "Please fill in all fields and select an image.",
+        description: "Please fill in all fields and select a video.",
         variant: "destructive",
       });
       return;
@@ -66,7 +87,7 @@ export default function MintPage() {
 
       toast({
         title: "Uploading to IPFS...",
-        description: "Please wait while we upload your NFT to IPFS.",
+        description: "Please wait while we upload your video to IPFS.",
       });
 
       const formData = new FormData();
@@ -88,32 +109,27 @@ export default function MintPage() {
     if (!tokenURI) throw new Error("Failed to get token URI from upload");
 
       toast({
-        title: "Minting NFT...",
+        title: "Minting Video NFT...",
         description: "Please confirm the ASA creation transaction in your wallet.",
       });
 
     const algod = getAlgodClient();
     const suggestedParams = await algod.getTransactionParams().do();
     suggestedParams.flatFee = true;
-    // Strict rule: flat fee 1000 microAlgos
-    // Note: algosdk v3 types fee as bigint.
     (suggestedParams as any).fee = 1000n;
 
-      // IMPORTANT: create a real algosdk.Transaction via factory. Do not serialize/clone/toByte.
       const txn = algosdk.makeAssetCreateTxnWithSuggestedParamsFromObject({
         sender: account,
         total: 1,
         decimals: 0,
         assetName: name,
-        unitName: "NFT",
+        unitName: "PPV",
         assetURL: tokenURI,
         defaultFrozen: false,
         suggestedParams,
       });
 
       console.log("Mint txn prepared:", txn);
-
-  // Wallet abstraction signs Transaction objects (Pera-first), returns signed bytes.
 
       toast({
         title: "Waiting for wallet signature...",
@@ -138,7 +154,6 @@ export default function MintPage() {
         description: `TxID: ${txId}. Waiting for confirmation...`,
       });
 
-      // STEP 1 — FIX CONFIRMATION HANDLING (assetIndex + BigInt-safe)
       const confirmedTxn = await algosdk.waitForConfirmation(algod, txId, 4);
 
       if (confirmedTxn.poolError && confirmedTxn.poolError.length > 0) {
@@ -193,20 +208,15 @@ export default function MintPage() {
       await algod.sendRawTransaction(signedApp[0]).do();
       await algosdk.waitForConfirmation(algod, appCallTxn.txID().toString(), 4);
 
-      // STEP 5 — HANDLE INDEXER DELAY
       await new Promise((resolve) => setTimeout(resolve, 3000));
 
-  // STEP 4 — FORCE UI REFRESH AFTER MINT (indexer source-of-truth)
-  // Refresh the global client-side NFT store. This makes the minted ASA
-  // appear immediately in the UI without relying on navigation revalidation.
   await refreshNFTs(account);
 
-  // Optional: still refresh route cache for any server components.
   router.refresh();
 
       toast({
         title: "Success!",
-        description: `NFT ASA created. Asset ID: ${assetId}`,
+        description: `Video NFT created. Asset ID: ${assetId}`,
       });
 
       setFile(null);
@@ -237,9 +247,9 @@ export default function MintPage() {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
         <Card className="w-full max-w-lg">
           <CardHeader>
-            <CardTitle className="text-3xl font-bold text-center">Create Your NFT</CardTitle>
+            <CardTitle className="text-3xl font-bold text-center">Upload Your Video</CardTitle>
             <CardDescription className="text-center">
-              Upload your artwork and provide the details below to mint it as a unique NFT.
+              Upload a video (max 2MB) and mint it as a Pay-Per-View NFT on Algorand.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -281,26 +291,32 @@ export default function MintPage() {
                 type="file"
                 id="file-upload"
                 className="hidden"
-                accept="image/*"
+                accept="video/*"
                 onChange={(e) => handleFileChange(e.target.files)}
               />
               {previewUrl ? (
                 <div className="relative w-full h-64">
-                  <Image src={previewUrl} alt="Preview" fill className="rounded-md object-contain" unoptimized />
+                  <video
+                    src={previewUrl}
+                    controls
+                    className="w-full h-full rounded-md object-contain"
+                    playsInline
+                  />
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center space-y-2 text-muted-foreground">
                   <Upload className="w-12 h-12" />
-                  <p>Drag & drop your image here, or click to select a file</p>
+                  <p>Drag & drop your video here, or click to select</p>
+                  <p className="text-xs">MP4, WebM, MOV — Max 2MB</p>
                 </div>
               )}
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="name">Name</label>
+              <label htmlFor="name">Title</label>
               <Input
                 id="name"
-                placeholder='e.g. "Sunset Over the Mountains"'
+                placeholder='e.g. "My Exclusive Content"'
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 disabled={isProcessing}
@@ -311,7 +327,7 @@ export default function MintPage() {
               <label htmlFor="description">Description</label>
               <Textarea
                 id="description"
-                placeholder="e.g. 'A beautiful painting capturing the serene sunset...'"
+                placeholder="e.g. 'A behind-the-scenes look at...'"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 disabled={isProcessing}
@@ -320,7 +336,7 @@ export default function MintPage() {
 
             {!account && (
               <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 text-sm text-yellow-800 dark:text-yellow-200">
-                ⚠️ Please connect your wallet using the "Connect Wallet" button in the navigation bar.
+                ⚠️ Please connect your wallet using the &quot;Connect Wallet&quot; button in the navigation bar.
               </div>
             )}
 
@@ -331,7 +347,7 @@ export default function MintPage() {
                   Minting...
                 </>
               ) : (
-                "Mint NFT"
+                "Mint Video NFT"
               )}
             </Button>
           </CardContent>

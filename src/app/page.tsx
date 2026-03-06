@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Wallet, Image as ImageIcon, Coins, Trophy } from "lucide-react";
+import { Wallet, Video as VideoIcon, Coins, Trophy } from "lucide-react";
 
 import NFTCard from "@/components/NFTCard";
 import SkeletonCard from "@/components/SkeletonCard";
@@ -39,14 +39,14 @@ export default function Home() {
         setNfts(result);
         console.log("[Home] NFT state set:", result.length, "items");
         toast({
-          title: "NFTs loaded",
-          description: `Loaded ${result.length} NFTs with funding data.`,
+          title: "Videos loaded",
+          description: `Loaded ${result.length} videos with revenue data.`,
         });
       } catch (e) {
         if (fetchIdRef.current !== id) return;
         console.error("[Home] loadNFTs failed:", e);
         toast({
-          title: "Failed to load NFTs",
+          title: "Failed to load videos",
           description: e instanceof Error ? e.message : String(e),
           variant: "destructive",
         });
@@ -88,10 +88,10 @@ export default function Home() {
   );
 
   const topSupportedNames = useMemo(() => {
-    if (topDonatedNfts.length === 0) return "No support yet";
+    if (topDonatedNfts.length === 0) return "No views yet";
     return topDonatedNfts
       .slice(0, 3)
-      .map((nft) => nft.metadata?.name || `NFT #${nft.tokenId}`)
+      .map((nft) => nft.metadata?.name || `Video #${nft.tokenId}`)
       .join(", ");
   }, [topDonatedNfts]);
 
@@ -170,34 +170,34 @@ export default function Home() {
           </div>
         </div>
 
-        {/* NFT Count */}
+        {/* Video Count */}
         <div className="group relative overflow-hidden rounded-2xl border bg-card p-5 transition-all hover:shadow-lg hover:border-blue-500/30 dark:bg-gradient-to-br dark:from-slate-900/80 dark:to-blue-950/40">
           <div className="flex items-start justify-between">
             <div className="space-y-1">
               <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Your NFTs
+                Your Videos
               </p>
               <p className="text-3xl font-bold tracking-tight">
                 {visibleNfts.length}
               </p>
             </div>
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
-              <ImageIcon className="h-5 w-5" />
+              <VideoIcon className="h-5 w-5" />
             </div>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
             {visibleNfts.length === 0
-              ? "Mint your first NFT to get started"
-              : `${visibleNfts.length} impact NFT${visibleNfts.length !== 1 ? "s" : ""} in your collection`}
+              ? "Upload your first video to get started"
+              : `${visibleNfts.length} video${visibleNfts.length !== 1 ? "s" : ""} in your collection`}
           </p>
         </div>
 
-        {/* Total Fan Funds */}
+        {/* Total Revenue */}
         <div className="group relative overflow-hidden rounded-2xl border bg-card p-5 transition-all hover:shadow-lg hover:border-emerald-500/30 dark:bg-gradient-to-br dark:from-slate-900/80 dark:to-emerald-950/40">
           <div className="flex items-start justify-between">
             <div className="space-y-1">
               <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Total Fan Funds
+                Total Revenue
               </p>
               <p className="text-3xl font-bold tracking-tight">
                 {fromMicroAlgos(totalDonationsAll)}
@@ -212,17 +212,17 @@ export default function Home() {
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
             {totalDonationsAll > 0n
-              ? "Across all your NFTs"
-              : "Donations will appear here"}
+              ? "Across all your videos"
+              : "Revenue will appear here"}
           </p>
         </div>
 
-        {/* Top Supported */}
+        {/* Most Watched */}
         <div className="group relative overflow-hidden rounded-2xl border bg-card p-5 transition-all hover:shadow-lg hover:border-indigo-500/30 dark:bg-gradient-to-br dark:from-slate-900/80 dark:to-indigo-950/40">
           <div className="flex items-start justify-between">
             <div className="space-y-1">
               <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Top Supported
+                Most Watched
               </p>
               <p className="text-sm font-semibold leading-snug truncate max-w-[180px]">
                 {topSupportedNames}
@@ -234,8 +234,8 @@ export default function Home() {
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
             {topDonatedNfts.length > 0
-              ? `Top ${Math.min(topDonatedNfts.length, 3)} by donation amount`
-              : "No donations recorded yet"}
+              ? `Top ${Math.min(topDonatedNfts.length, 3)} by view revenue`
+              : "No views recorded yet"}
           </p>
         </div>
       </div>
@@ -243,20 +243,20 @@ export default function Home() {
       <section className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-3">
-            Explore impact NFTs
+            Pay Per View
           </h1>
           <p className="text-muted-foreground max-w-xl text-sm md:text-base">
-            Discover NFTs, support creators, and track the most supported drops
-            in the community.
+            Upload videos, earn ALGO per view. Viewers pay a fixed fee to watch
+            exclusive content on Algorand.
           </p>
         </div>
       </section>
 
       <section>
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-semibold">All NFTs</h2>
+          <h2 className="text-2xl font-semibold">All Videos</h2>
           <Button asChild>
-            <Link href="/mint">Mint NFT</Link>
+            <Link href="/mint">Upload Video</Link>
           </Button>
         </div>
 
@@ -280,13 +280,13 @@ export default function Home() {
           </div>
         ) : (
           <div className="rounded-xl border bg-card p-10 text-center">
-            <h3 className="text-lg font-semibold">No NFTs yet</h3>
+            <h3 className="text-lg font-semibold">No videos yet</h3>
             <p className="text-muted-foreground text-sm mt-2">
-              Be the first to mint an impact NFT and start building your fan
-              funding journey.
+              Be the first to upload a video and start earning through Pay Per
+              View.
             </p>
             <Button className="mt-6" asChild>
-              <Link href="/mint">Mint your first NFT</Link>
+              <Link href="/mint">Upload your first video</Link>
             </Button>
           </div>
         )}

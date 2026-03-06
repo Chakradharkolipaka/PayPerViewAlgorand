@@ -10,8 +10,8 @@ import BottomNav from "@/components/BottomNav";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Fan Funding",
-  description: "",
+  title: "Pay Per View — Algorand",
+  description: "Upload videos, earn ALGO per view. Pay-Per-View on Algorand.",
 };
 
 export default function RootLayout({

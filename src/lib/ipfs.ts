@@ -1,7 +1,8 @@
 interface Metadata {
   name: string;
   description: string;
-  image: string;
+  video: string;
+  mime_type: string;
 }
 
 export async function uploadToIPFS(file: File, name: string, description: string): Promise<string> {
@@ -13,7 +14,7 @@ export async function uploadToIPFS(file: File, name: string, description: string
   }
 
   try {
-    // 1. Upload the image file using FormData
+    // 1. Upload the video file using FormData
     const formData = new FormData();
     formData.append("file", file);
 
@@ -38,13 +39,14 @@ export async function uploadToIPFS(file: File, name: string, description: string
     }
 
     const fileJson = await fileRes.json();
-    const imageUrl = `https://gateway.pinata.cloud/ipfs/${fileJson.IpfsHash}`;
+    const videoUrl = `https://gateway.pinata.cloud/ipfs/${fileJson.IpfsHash}`;
 
     // 2. Upload the metadata JSON
     const metadata: Metadata = {
       name,
       description,
-      image: imageUrl,
+      video: videoUrl,
+      mime_type: file.type || "video/mp4",
     };
 
     const jsonRes = await fetch("https://api.pinata.cloud/pinning/pinJSONToIPFS", {

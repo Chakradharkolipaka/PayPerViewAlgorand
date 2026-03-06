@@ -2,7 +2,7 @@
 
 import { ThemeToggle } from "@/components/theme-toggle";
 import Link from "next/link";
-import { Home, PlusCircle } from "lucide-react";
+import { Home, PlusCircle, Video } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 
@@ -36,11 +36,11 @@ export default function Navbar() {
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center gap-2">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary text-background text-sm font-bold">
-              FD
+              PPV
             </span>
             <span className="flex flex-col">
-              <span className="text-sm font-semibold leading-tight">Fan Donation</span>
-              <span className="text-xs text-muted-foreground leading-tight">Support creators on-chain</span>
+              <span className="text-sm font-semibold leading-tight">Pay Per View</span>
+              <span className="text-xs text-muted-foreground leading-tight">Video streaming on Algorand</span>
             </span>
           </Link>
 
@@ -57,7 +57,7 @@ export default function Navbar() {
               className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium hover:bg-accent hover:text-accent-foreground ${pathname === "/mint" ? "bg-accent text-accent-foreground" : ""}`}
             >
               <PlusCircle className="h-4 w-4" />
-              <span>Mint NFT</span>
+              <span>Upload Video</span>
             </Link>
           </div>
         </div>

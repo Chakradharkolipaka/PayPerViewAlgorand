@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { MAX_VIDEO_SIZE_BYTES } from "@/constants";
 
 export const runtime = "nodejs";
 
@@ -20,6 +21,22 @@ export async function POST(req: Request) {
     if (!file || !name || !description) {
       return NextResponse.json(
         { error: "Missing file/name/description" },
+        { status: 400 }
+      );
+    }
+
+    // Validate video file type
+    if (!file.type.startsWith("video/")) {
+      return NextResponse.json(
+        { error: "Only video files are accepted" },
+        { status: 400 }
+      );
+    }
+
+    // Validate file size (2 MB max)
+    if (file.size > MAX_VIDEO_SIZE_BYTES) {
+      return NextResponse.json(
+        { error: `Video must be under ${MAX_VIDEO_SIZE_BYTES / (1024 * 1024)}MB` },
         { status: 400 }
       );
     }
@@ -46,9 +63,9 @@ export async function POST(req: Request) {
     }
 
     const fileJson = await fileRes.json();
-    const imageUrl = `https://gateway.pinata.cloud/ipfs/${fileJson.IpfsHash}`;
+    const videoUrl = `https://gateway.pinata.cloud/ipfs/${fileJson.IpfsHash}`;
 
-    // Upload metadata to Pinata
+    // Upload metadata to Pinata (video field instead of image)
     const metaRes = await fetch("https://api.pinata.cloud/pinning/pinJSONToIPFS", {
       method: "POST",
       headers: {
@@ -56,7 +73,12 @@ export async function POST(req: Request) {
         Authorization: `Bearer ${jwt}`,
       },
       body: JSON.stringify({
-        pinataContent: { name, description, image: imageUrl },
+        pinataContent: {
+          name,
+          description,
+          video: videoUrl,
+          mime_type: file.type || "video/mp4",
+        },
         pinataMetadata: { name: `${name}-metadata` },
       }),
     });

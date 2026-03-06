@@ -9,7 +9,7 @@ export interface NftData {
   tokenId: number;
   metadata: any;
   owner: string;
-  /** Total fan donations received (microAlgos) */
+  /** Total pay-per-view payments received (microAlgos) */
   totalDonations: bigint;
 }
 
@@ -38,10 +38,10 @@ async function safeFetchJson(url: string): Promise<any | null> {
 }
 
 /**
- * Fetch on-chain donation total for an NFT owner address.
+ * Fetch on-chain payment total for a video NFT owner address.
  *
- * Donations are plain ALGO payment txns sent TO the owner with a note
- * containing "FanFunding donation for <tokenId>".
+ * Payments are plain ALGO payment txns sent TO the owner with a note
+ * containing "PayPerView for <tokenId>".
  *
  * We query the Indexer for pay txns received by the owner and sum the
  * amounts whose note matches the tokenId.
@@ -51,7 +51,7 @@ async function fetchDonationTotalForToken(
   tokenId: number
 ): Promise<bigint> {
   const indexer = getIndexerClient();
-  const notePrefix = `FanFunding donation for ${tokenId}`;
+  const notePrefix = `PayPerView for ${tokenId}`;
 
   try {
     // Search pay txns to the owner with matching note-prefix
@@ -189,7 +189,7 @@ export async function fetchAllNFTsWithFundingData(
 
       return {
         tokenId: assetId,
-        metadata: metadata ?? { name: params?.name, image: params?.url },
+        metadata: metadata ?? { name: params?.name, video: params?.url },
         owner: account,
         totalDonations,
       };

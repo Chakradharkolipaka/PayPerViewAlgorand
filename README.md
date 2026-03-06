@@ -1,4 +1,4 @@
-# FanFundingAlgorand
+ # FanFundingAlgorand
 
 Fan Funding: Algorand TestNet NFT marketplace where creators mint impact NFTs and fans donate ALGO on-chain.
 
