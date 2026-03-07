@@ -5,9 +5,10 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const appIdStr = process.env.NEXT_PUBLIC_REGISTRY_APP_ID;
+    console.log("[/api/nfts] NEXT_PUBLIC_REGISTRY_APP_ID:", appIdStr);
     const appId = appIdStr ? Number(appIdStr) : NaN;
     if (!Number.isFinite(appId) || appId <= 0) {
-      // If not configured, return empty list (keeps app usable) 
+      console.log("[/api/nfts] Invalid appId, returning []");
       return Response.json([]);
     }
 
@@ -30,6 +31,7 @@ export async function GET() {
     }
 
     const globalState: any[] = appInfo?.application?.params?.globalState ?? appInfo?.application?.params?.["global-state"] ?? [];
+    console.log("[/api/nfts] Global state entries:", globalState.length);
 
     const assetIds: number[] = [];
     for (const entry of globalState) {
@@ -44,6 +46,7 @@ export async function GET() {
     }
 
     const uniqueAssetIds = [...new Set(assetIds)].slice(0, 50);
+    console.log("[/api/nfts] Asset IDs from registry:", uniqueAssetIds);
 
     const nfts: any[] = [];
     const metadataMap: Record<number, any> = {};
@@ -87,6 +90,7 @@ export async function GET() {
     }
 
     // Aggregate pay-per-view totals per asset (using note prefix)
+    console.log("[/api/nfts] Video NFTs after filter:", nfts.length);
     const donationTotals: Record<number, bigint> = {};
 
     for (const asset of nfts) {
