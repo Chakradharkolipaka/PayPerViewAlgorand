@@ -33,7 +33,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Validate file size (2 MB max)
+    // Validate file size (3 MB max)
     if (file.size > MAX_VIDEO_SIZE_BYTES) {
       return NextResponse.json(
         { error: `Video must be under ${MAX_VIDEO_SIZE_BYTES / (1024 * 1024)}MB` },

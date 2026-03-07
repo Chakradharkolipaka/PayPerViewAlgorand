@@ -49,7 +49,7 @@ export default function MintPage() {
         return;
       }
 
-      // Validate file size (2 MB)
+      // Validate file size (3 MB)
       if (selectedFile.size > MAX_VIDEO_SIZE_BYTES) {
         toast({
           title: "File too large",
@@ -249,7 +249,7 @@ export default function MintPage() {
           <CardHeader>
             <CardTitle className="text-3xl font-bold text-center">Upload Your Video</CardTitle>
             <CardDescription className="text-center">
-              Upload a video (max 2MB) and mint it as a Pay-Per-View NFT on Algorand.
+              Upload a video (max 3MB) and mint it as a Pay-Per-View NFT on Algorand.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -307,7 +307,7 @@ export default function MintPage() {
                 <div className="flex flex-col items-center justify-center space-y-2 text-muted-foreground">
                   <Upload className="w-12 h-12" />
                   <p>Drag & drop your video here, or click to select</p>
-                  <p className="text-xs">MP4, WebM, MOV — Max 2MB</p>
+                  <p className="text-xs">MP4, WebM, MOV — Max 3MB</p>
                 </div>
               )}
             </div>
