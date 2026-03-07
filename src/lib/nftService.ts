@@ -179,6 +179,18 @@ export async function fetchAllNFTsWithFundingData(
         metadata = await safeFetchJson(metaUrl);
       }
 
+      // ── Skip non-video NFTs (old JPG-based assets) ──
+      const hasVideo =
+        metadata?.video ||
+        metadata?.mime_type?.startsWith("video/") ||
+        params?.url?.match(/\.(mp4|mov|webm|mkv)(\?|$)/i);
+      if (!hasVideo) {
+        console.log(
+          `[nftService] Skipping asset ${assetId}: no video field in metadata (likely old image NFT)`
+        );
+        return null;
+      }
+
       // ── Fetch on-chain donation total ──
       const totalDonations = await fetchDonationTotalForToken(account, assetId);
       console.log(
