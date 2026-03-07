@@ -25,9 +25,21 @@ export async function GET() {
     // Read registry from app global state
     let appInfo: any;
     try {
-      appInfo = await timeout(indexerClient.lookupApplications(appId).do(), 5000);
-    } catch {
-      return Response.json([]);
+      appInfo = await timeout(indexerClient.lookupApplications(appId).do(), 8000);
+    } catch (e) {
+      console.log("[/api/nfts] lookupApplications failed:", e);
+      // Fallback: try direct REST call
+      try {
+        const res = await timeout(
+          fetch(`https://testnet-idx.algonode.cloud/v2/applications/${appId}`).then(r => r.json()),
+          8000
+        );
+        appInfo = res;
+        console.log("[/api/nfts] Fallback REST succeeded");
+      } catch {
+        console.log("[/api/nfts] Fallback REST also failed");
+        return Response.json([]);
+      }
     }
 
     const globalState: any[] = appInfo?.application?.params?.globalState ?? appInfo?.application?.params?.["global-state"] ?? [];
@@ -35,11 +47,18 @@ export async function GET() {
 
     const assetIds: number[] = [];
     for (const entry of globalState) {
-      const keyB64 = entry.key as string;
-      if (!keyB64) continue;
-      const keyBytes = Buffer.from(keyB64, "base64");
-      // keys are: "a:" + itob(assetId)
-      if (keyBytes.length !== 2 + 8) continue;
+      // algosdk v3: entry.key is Uint8Array (already decoded from base64)
+      // algosdk v2 / raw JSON: entry.key is a base64 string
+      let keyBytes: Buffer;
+      if (entry.key instanceof Uint8Array) {
+        keyBytes = Buffer.from(entry.key);
+      } else if (typeof entry.key === "string") {
+        keyBytes = Buffer.from(entry.key, "base64");
+      } else {
+        continue;
+      }
+      // keys are: "a:" + itob(assetId) → 2 + 8 = 10 bytes
+      if (keyBytes.length !== 10) continue;
       if (keyBytes[0] !== 0x61 || keyBytes[1] !== 0x3a) continue; // 'a:'
       const assetId = Number(keyBytes.readBigUInt64BE(2));
       if (Number.isFinite(assetId) && assetId > 0) assetIds.push(assetId);
