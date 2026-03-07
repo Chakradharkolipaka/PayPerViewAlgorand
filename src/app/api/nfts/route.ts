@@ -86,32 +86,42 @@ export async function GET() {
       }
     }
 
-    // Aggregate donation totals (keep it small and safe)
-    const creators = [...new Set(nfts.map((n) => n?.params?.creator).filter(Boolean))] as string[];
-    const donationTotals: Record<string, bigint> = {};
+    // Aggregate pay-per-view totals per asset (using note prefix)
+    const donationTotals: Record<number, bigint> = {};
 
-    for (const creator of creators) {
+    for (const asset of nfts) {
+      const assetId = Number(asset.index);
+      const creator = asset.params?.creator;
+      if (!creator) { donationTotals[assetId] = 0n; continue; }
+
+      const notePrefix = `PayPerView for ${assetId}`;
       let txnsRes: any;
       try {
         txnsRes = await timeout(
-          indexerClient.searchForTransactions().address(creator).txType("pay").limit(50).do(),
+          indexerClient
+            .searchForTransactions()
+            .address(creator)
+            .txType("pay")
+            .notePrefix(new TextEncoder().encode(notePrefix))
+            .limit(200)
+            .do(),
           5000
         );
       } catch {
-        donationTotals[creator] = 0n;
+        donationTotals[assetId] = 0n;
         continue;
       }
 
       let total = 0n;
-      for (const txn of txnsRes.transactions ?? []) {
-        const amount = BigInt(
-          (txn as any).paymentTransaction?.amount ??
-            (txn as any)["payment-transaction"]?.amount ??
-            0
-        );
-        if (amount > 0n) total += amount;
+      for (const txn of (txnsRes as any)?.transactions ?? []) {
+        const receiver =
+          txn?.["payment-transaction"]?.receiver ?? txn?.paymentTransaction?.receiver;
+        if (receiver !== creator) continue;
+        const rawAmt =
+          txn?.["payment-transaction"]?.amount ?? txn?.paymentTransaction?.amount ?? 0;
+        total += typeof rawAmt === "bigint" ? rawAmt : BigInt(rawAmt);
       }
-      donationTotals[creator] = total;
+      donationTotals[assetId] = total;
     }
 
     return Response.json(
@@ -124,7 +134,8 @@ export async function GET() {
             video: asset.params?.url,
           },
           owner: asset.params?.creator,
-          totalDonations: donationTotals[asset.params?.creator] ?? 0n,
+          // bigint cannot be JSON-serialized — convert to string
+          totalDonations: String(donationTotals[Number(asset.index)] ?? 0n),
         };
       })
     );
