@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { fromMicroAlgos } from "@/lib/algorand";
 import { useToast } from "@/components/ui/use-toast";
 import { usePeraAccount } from "@/hooks/usePeraAccount";
-import { fetchAllNFTsWithFundingData, type NftData } from "@/lib/nftService";
+import { type NftData } from "@/lib/nftService";
 
 // Re-export NftData so existing imports from "@/app/page" keep working.
 export type { NftData };
@@ -21,27 +21,31 @@ export default function Home() {
   const { toast } = useToast();
   const { account } = usePeraAccount();
   const [isLoading, setIsLoading] = useState(false);
-  const fetchIdRef = useRef(0); // guards against stale closures / race conditions
+  const fetchIdRef = useRef(0);
 
-  // ── 🔟 WALLET SWITCH / MOUNT: fetch via single source of truth ──
+  // ── Fetch ALL registered video NFTs from the registry app (visible to everyone) ──
   const loadNFTs = useCallback(
-    async (addr: string) => {
+    async () => {
       const id = ++fetchIdRef.current;
       setIsLoading(true);
-      console.log("[Home] loadNFTs triggered for:", addr, "fetchId:", id);
+      console.log("[Home] loadNFTs triggered — fetching from registry app");
 
       try {
-        const result = await fetchAllNFTsWithFundingData(addr);
-        if (fetchIdRef.current !== id) {
-          console.log("[Home] Stale fetch ignored (id mismatch)");
-          return;
-        }
-        setNfts(result);
-        console.log("[Home] NFT state set:", result.length, "items");
-        toast({
-          title: "Videos loaded",
-          description: `Loaded ${result.length} videos with revenue data.`,
-        });
+        const res = await fetch("/api/nfts", { cache: "no-store" });
+        if (!res.ok) throw new Error(`API returned ${res.status}`);
+        const data = await res.json();
+        if (fetchIdRef.current !== id) return;
+
+        // Normalize totalDonations to bigint
+        const normalized: NftData[] = (data ?? []).map((item: any) => ({
+          ...item,
+          totalDonations: typeof item.totalDonations === "bigint"
+            ? item.totalDonations
+            : BigInt(item.totalDonations ?? 0),
+        }));
+
+        setNfts(normalized);
+        console.log("[Home] NFT state set:", normalized.length, "videos from registry");
       } catch (e) {
         if (fetchIdRef.current !== id) return;
         console.error("[Home] loadNFTs failed:", e);
@@ -58,14 +62,10 @@ export default function Home() {
     [toast]
   );
 
+  // Load on mount (no wallet required to browse)
   useEffect(() => {
-    if (!account) {
-      console.warn("[Home] Account null — clearing NFTs");
-      setNfts([]);
-      return;
-    }
-    void loadNFTs(account);
-  }, [account, loadNFTs]);
+    void loadNFTs();
+  }, [loadNFTs]);
 
   // ── Derived state: ALWAYS recomputed when nfts change ──
   const visibleNfts = useMemo(
@@ -123,15 +123,14 @@ export default function Home() {
 
   // Called by NFTCard AFTER on-chain confirmation — hard refetch for consistency
   const handleDonationConfirmed = useCallback(async () => {
-    if (!account) return;
     console.log("[Home] Post-confirmation hard refetch triggered");
-    await loadNFTs(account);
-  }, [account, loadNFTs]);
+    await loadNFTs();
+  }, [loadNFTs]);
 
   const shortenAddress = (addr: string) =>
     `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
-  const isPageLoading = !!account && isLoading;
+  const isPageLoading = isLoading;
 
   return (
     <main className="container mx-auto px-4 py-10 space-y-10">

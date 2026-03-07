@@ -46,10 +46,41 @@ export async function GET() {
     const uniqueAssetIds = [...new Set(assetIds)].slice(0, 50);
 
     const nfts: any[] = [];
+    const metadataMap: Record<number, any> = {};
+
     for (const id of uniqueAssetIds) {
       try {
         const assetInfo = await timeout(indexerClient.lookupAssetByID(id).do(), 5000);
-        if (assetInfo?.asset) nfts.push(assetInfo.asset);
+        if (!assetInfo?.asset) continue;
+
+        const params = assetInfo.asset.params ?? {};
+
+        // Resolve IPFS metadata to check for video field
+        let ipfsMeta: any = null;
+        const rawUrl = params?.url ?? "";
+        let metaUrl = rawUrl.trim();
+        if (metaUrl.startsWith("ipfs://")) {
+          metaUrl = metaUrl.replace("ipfs://", "https://gateway.pinata.cloud/ipfs/");
+        } else if (/^[a-zA-Z0-9]{46,}$/.test(metaUrl) && !metaUrl.startsWith("http")) {
+          metaUrl = `https://gateway.pinata.cloud/ipfs/${metaUrl}`;
+        }
+
+        if (metaUrl) {
+          try {
+            const metaRes = await timeout(fetch(metaUrl, { cache: "no-store" }).then(r => r.ok ? r.json() : null), 5000);
+            ipfsMeta = metaRes;
+          } catch { /* ignore */ }
+        }
+
+        // Skip non-video NFTs (old image-based assets)
+        const hasVideo =
+          ipfsMeta?.video ||
+          ipfsMeta?.mime_type?.startsWith("video/") ||
+          rawUrl.match(/\.(mp4|mov|webm|mkv)(\?|$)/i);
+        if (!hasVideo) continue;
+
+        nfts.push(assetInfo.asset);
+        metadataMap[Number(assetInfo.asset.index)] = ipfsMeta;
       } catch {
         // ignore bad lookup (keep demo stable)
       }
@@ -84,15 +115,18 @@ export async function GET() {
     }
 
     return Response.json(
-      nfts.map((asset) => ({
-        tokenId: asset.index,
-        metadata: {
-          name: asset.params?.name,
-          image: asset.params?.url,
-        },
-        owner: asset.params?.creator,
-        totalDonations: donationTotals[asset.params?.creator] ?? 0n,
-      }))
+      nfts.map((asset) => {
+        const ipfsMeta = metadataMap[Number(asset.index)] ?? null;
+        return {
+          tokenId: Number(asset.index),
+          metadata: ipfsMeta ?? {
+            name: asset.params?.name,
+            video: asset.params?.url,
+          },
+          owner: asset.params?.creator,
+          totalDonations: donationTotals[asset.params?.creator] ?? 0n,
+        };
+      })
     );
   } catch (err) {
     console.error("API_ERROR", err);
