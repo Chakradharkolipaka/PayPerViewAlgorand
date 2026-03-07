@@ -9,7 +9,7 @@ export async function GET() {
     const appIdStr = process.env.NEXT_PUBLIC_REGISTRY_APP_ID;
     const appId = appIdStr ? Number(appIdStr) : NaN;
     if (!Number.isFinite(appId) || appId <= 0) {
-      return Response.json([]);
+      return Response.json({ error: "no appId", appIdStr });
     }
 
     const timeout = <T,>(p: Promise<T>, ms: number) =>
@@ -22,18 +22,21 @@ export async function GET() {
 
     // ── 1. Read registry global state via direct REST (algosdk v3 typed
     //       models lose global-state entries during deserialization) ──
+    const indexerUrl = `${INDEXER_BASE}/v2/applications/${appId}`;
     let globalState: any[];
     try {
-      const res = await timeout(
-        fetch(`${INDEXER_BASE}/v2/applications/${appId}`).then(r => {
-          if (!r.ok) throw new Error(`Indexer ${r.status}`);
-          return r.json();
-        }),
-        8000
-      );
+      const fetchRes = await timeout(fetch(indexerUrl), 8000);
+      if (!fetchRes.ok) {
+        return Response.json({ error: "indexer_http", status: fetchRes.status, indexerUrl });
+      }
+      const res = await fetchRes.json();
       globalState = res?.application?.params?.["global-state"] ?? [];
-    } catch {
-      return Response.json([]);
+    } catch (e: any) {
+      return Response.json({ error: "indexer_fetch_failed", message: e?.message, indexerUrl });
+    }
+
+    if (globalState.length === 0) {
+      return Response.json({ error: "empty_global_state", indexerUrl, appId });
     }
 
     // ── 2. Parse asset IDs from registry keys ("a:" + itob(assetId)) ──
@@ -47,7 +50,7 @@ export async function GET() {
     }
 
     const uniqueAssetIds = [...new Set(assetIds)].slice(0, 50);
-    if (uniqueAssetIds.length === 0) return Response.json([]);
+    if (uniqueAssetIds.length === 0) return Response.json({ error: "no_asset_ids_parsed", globalStateLength: globalState.length });
 
     // ── 3. Fetch asset info + IPFS metadata, filter to video-only NFTs ──
     const nfts: any[] = [];
