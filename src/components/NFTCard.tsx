@@ -15,6 +15,7 @@ import { useToast } from "@/components/ui/use-toast";
 import Confetti from "react-confetti";
 import { Loader2, Play, Lock } from "lucide-react";
 import algosdk from "algosdk";
+import { useRouter } from "next/navigation";
 
 import { type NftData } from "@/lib/nftService";
 import { fromMicroAlgos, getAlgodClient, toMicroAlgos } from "@/lib/algorand";
@@ -36,10 +37,10 @@ export default function NFTCard({ nft, onDelete, onDonation, onTotalsChange }: N
   const [showConfetti, setShowConfetti] = useState(false);
   const [events, setEvents] = useState<any[]>([]);
   const [isPaying, setIsPaying] = useState(false);
-  const [isUnlocked, setIsUnlocked] = useState(false);
   const { account } = usePeraAccount();
   const { toast } = useToast();
   const payClickedRef = useRef(false);
+  const router = useRouter();
 
   useEffect(() => {
     void reconnectOnce();
@@ -109,20 +110,24 @@ export default function NFTCard({ nft, onDelete, onDonation, onTotalsChange }: N
       console.log("[NFTCard] === PAYMENT CONFIRMED ===");
       console.log("[NFTCard] Confirmed Round:", confirmedRound);
 
-      toast({ title: "Payment Confirmed!", description: `Enjoy your video! Confirmed in round ${confirmedRound}.` });
+      toast({ title: "Payment Confirmed!", description: `Redirecting to video player...` });
 
       setShowConfetti(true);
       setTimeout(() => setShowConfetti(false), 5000);
 
-      // Unlock the video for viewing
-      setIsUnlocked(true);
-
       setEvents((prev) => [{ donor: account, amount: amountMicro, txId, confirmedRound }, ...prev]);
 
-      await new Promise((r) => setTimeout(r, 2000));
-      if (onTotalsChange) onTotalsChange();
+      // Trigger revenue refetch in background
+      if (onTotalsChange) {
+        setTimeout(() => onTotalsChange(), 2000);
+      }
 
-      console.log("[NFTCard] === PAY PER VIEW COMPLETE ===");
+      // Redirect to fullscreen video player page
+      const videoUrl = metadata?.video || metadata?.image || "";
+      const videoName = metadata?.name || `Video #${tokenId}`;
+      router.push(`/watch/${tokenId}?v=${encodeURIComponent(videoUrl)}&name=${encodeURIComponent(videoName)}`);
+
+      console.log("[NFTCard] === PAY PER VIEW COMPLETE — REDIRECTING ===");
     } catch (err) {
       console.error("[NFTCard] === PAYMENT FAILED ===", err);
       toast({ title: "Payment Failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
@@ -132,10 +137,16 @@ export default function NFTCard({ nft, onDelete, onDonation, onTotalsChange }: N
     }
   };
 
+  // Owner clicks → go straight to player (no payment)
+  const handleOwnerWatch = () => {
+    const videoUrl = metadata?.video || metadata?.image || "";
+    const videoName = metadata?.name || `Video #${tokenId}`;
+    router.push(`/watch/${tokenId}?v=${encodeURIComponent(videoUrl)}&name=${encodeURIComponent(videoName)}`);
+  };
+
   const shortenedAddress = (address: string) => `${address.slice(0, 6)}...${address.slice(-4)}`;
 
   const computedTotalDonations = totalDonations ?? 0n;
-  const canWatch = isOwner || isUnlocked;
   const videoUrl = metadata?.video || metadata?.image || null;
 
   return (
@@ -144,14 +155,25 @@ export default function NFTCard({ nft, onDelete, onDonation, onTotalsChange }: N
       <Card className="overflow-hidden">
         <CardHeader className="p-0">
           <div className="relative w-full h-64 bg-black">
-            {canWatch && videoUrl ? (
-              <video
-                src={videoUrl}
-                controls
-                controlsList="nodownload"
-                className="w-full h-full object-contain"
-                playsInline
-              />
+            {/* Always show video as a muted cover/thumbnail — never playable inline */}
+            {videoUrl ? (
+              <>
+                <video
+                  src={videoUrl}
+                  muted
+                  playsInline
+                  loop
+                  autoPlay
+                  className="w-full h-full object-cover pointer-events-none"
+                />
+                {/* Dark overlay with lock icon */}
+                <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center">
+                  <Lock className="h-10 w-10 text-white/80 mb-2" />
+                  <p className="text-white text-sm font-medium">
+                    {PAY_PER_VIEW_AMOUNT_ALGO} ALGO to watch
+                  </p>
+                </div>
+              </>
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 text-white">
                 <Lock className="h-12 w-12 mb-3 text-muted-foreground" />
@@ -177,11 +199,10 @@ export default function NFTCard({ nft, onDelete, onDonation, onTotalsChange }: N
             <p className="text-xs text-muted-foreground">Total Revenue</p>
           </div>
           {isOwner ? (
-            <span className="text-xs text-emerald-500 font-medium">Your Video</span>
-          ) : canWatch ? (
-            <span className="text-xs text-emerald-500 font-medium flex items-center gap-1">
-              <Play className="h-3 w-3" /> Unlocked
-            </span>
+            <Button variant="outline" size="sm" onClick={handleOwnerWatch}>
+              <Play className="mr-1.5 h-4 w-4" />
+              Watch (Owner)
+            </Button>
           ) : (
             <Dialog>
               <DialogTrigger asChild>
@@ -197,13 +218,14 @@ export default function NFTCard({ nft, onDelete, onDonation, onTotalsChange }: N
                   </DialogTitle>
                   <DialogDescription>
                     Pay a fixed {PAY_PER_VIEW_AMOUNT_ALGO} ALGO to the creator to
-                    unlock and watch this video.
+                    watch this video in full screen. Like a movie theater — each
+                    viewing requires a ticket.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
                   <div className="rounded-lg bg-muted p-4 text-center">
                     <p className="text-2xl font-bold">{PAY_PER_VIEW_AMOUNT_ALGO} ALGO</p>
-                    <p className="text-xs text-muted-foreground mt-1">Fixed viewing fee</p>
+                    <p className="text-xs text-muted-foreground mt-1">One-time viewing ticket</p>
                   </div>
                   <Button
                     onClick={handlePayToWatch}
