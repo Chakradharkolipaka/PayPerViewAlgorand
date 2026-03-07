@@ -44,6 +44,20 @@ export async function GET() {
 
     const globalState: any[] = appInfo?.application?.params?.globalState ?? appInfo?.application?.params?.["global-state"] ?? [];
     console.log("[/api/nfts] Global state entries:", globalState.length);
+    // Debug: log the actual structure to find the global state
+    if (globalState.length === 0) {
+      const app = appInfo?.application ?? appInfo;
+      const params = app?.params;
+      console.log("[/api/nfts] appInfo type:", typeof appInfo, "constructor:", appInfo?.constructor?.name);
+      console.log("[/api/nfts] application keys:", app ? Object.keys(app) : "N/A");
+      console.log("[/api/nfts] params keys:", params ? Object.keys(params) : "N/A");
+      // Try alternate paths
+      const altGs = app?.globalState ?? app?.["global-state"] ?? params?.["global-state"] ?? params?.globalState ?? [];
+      console.log("[/api/nfts] Alt global state entries:", altGs.length);
+      if (altGs.length > 0) {
+        console.log("[/api/nfts] Found via alternate path! First entry keys:", Object.keys(altGs[0]));
+      }
+    }
 
     const assetIds: number[] = [];
     for (const entry of globalState) {
