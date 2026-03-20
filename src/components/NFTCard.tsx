@@ -123,9 +123,10 @@ export default function NFTCard({ nft, onDelete, onDonation, onTotalsChange }: N
       }
 
       // Redirect to fullscreen video player page
-      const videoUrl = metadata?.video || metadata?.image || "";
-      const videoName = metadata?.name || `Video #${tokenId}`;
-      router.push(`/watch/${tokenId}?v=${encodeURIComponent(videoUrl)}&name=${encodeURIComponent(videoName)}`);
+  // NOTE: We no longer pass the raw IPFS video URL via query params.
+  // The /watch/[tokenId] page uses an x402-style server gate to decide
+  // whether the viewer has paid and then returns the playable URL.
+  router.push(`/watch/${tokenId}`);
 
       console.log("[NFTCard] === PAY PER VIEW COMPLETE — REDIRECTING ===");
     } catch (err) {
@@ -139,9 +140,7 @@ export default function NFTCard({ nft, onDelete, onDonation, onTotalsChange }: N
 
   // Owner clicks → go straight to player (no payment)
   const handleOwnerWatch = () => {
-    const videoUrl = metadata?.video || metadata?.image || "";
-    const videoName = metadata?.name || `Video #${tokenId}`;
-    router.push(`/watch/${tokenId}?v=${encodeURIComponent(videoUrl)}&name=${encodeURIComponent(videoName)}`);
+    router.push(`/watch/${tokenId}`);
   };
 
   const shortenedAddress = (address: string) => `${address.slice(0, 6)}...${address.slice(-4)}`;

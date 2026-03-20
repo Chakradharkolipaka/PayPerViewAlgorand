@@ -1,11 +1,11 @@
- # FanFundingAlgorand
+ # PayPerViewAlgorand
 
-Fan Funding: Algorand TestNet NFT marketplace where creators mint impact NFTs and fans donate ALGO on-chain.
+Pay Per View: an Algorand TestNet video platform where creators mint **video NFTs** and viewers pay a **fixed ALGO ticket** per watch.
 
 ## Links
 
-- App: https://fan-funding-algorand.vercel.app/
-- GitHub: https://github.com/Chakradharkolipaka/FanFundingAlgorand
+- App: https://pay-per-view-algorand.vercel.app/
+- GitHub: https://github.com/Chakradharkolipaka/PayPerViewAlgorand
 - Wallet (Pera Algo Wallet): https://perawallet.app/
 - TestNet faucet: https://lora.algokit.io/testnet/fund
 
@@ -43,14 +43,14 @@ Create `.env.local`:
 - Approve the connection in the Pera mobile app.
 - The connected TestNet account address is shown in the navbar.
 
-### 2) Mint NFT (ASA)
+### 2) Mint Video NFT (Algorand ASA)
 
 On `/mint`:
 
-1. Upload image + enter name/description.
+1. Upload a video + enter name/description.
 2. Server route `/api/pinata/upload` uploads to Pinata:
-	- Image → IPFS
-	- Metadata JSON `{ name, description, image }` → IPFS
+	- Video → IPFS
+	- Metadata JSON `{ name, description, video, mime_type }` → IPFS
 	- Returns `tokenURI` (HTTP gateway URL)
 3. The UI then builds an **Algorand ASA create transaction**:
 	- `assetName = name`
@@ -69,10 +69,44 @@ On `/`:
 - `GET /api/nfts` reads the registry app global state (canonical on-chain registry).
 - For each registered `assetId`, the API looks up the asset params and returns simplified NFT cards.
 
-### 4) Donate / fund
+### 4) Watch (Pay-Per-View)
 
-- The **Fan Donate** button builds a normal ALGO payment txn to the creator address.
-- Pera signs, the app submits, then confirmation updates the UI.
+This project uses an **x402-style gate** for Pay-Per-View.
+
+#### Why x402-style?
+
+The app returns **HTTP 402 Payment Required** from the server until a valid on-chain payment is detected. This keeps the watch flow server-enforced and avoids sending the raw IPFS video URL in query params.
+
+#### Watch flow
+
+1. User clicks **Watch** on a video card.
+2. The app navigates to `/watch/[tokenId]`.
+3. The page calls:
+
+	- `GET /api/watch/[tokenId]?viewer=<walletAddress>`
+
+4. The server responds:
+
+	**200 OK** (already paid or viewer is owner)
+	- `{ tokenId, owner, metadata, videoUrl }`
+
+	**402 Payment Required** (ticket required)
+	- `{ requiredPayment: { receiver, amountAlgo, amountMicro, note } }`
+
+5. If 402, the watch page builds a normal Algorand **payment transaction**:
+
+	- `sender = viewer`
+	- `receiver = creator`
+	- `amount = PAY_PER_VIEW_AMOUNT_ALGO` (microAlgos on-chain)
+	- `note = "PayPerView for <tokenId>"`
+
+6. Pera signs, the app submits, then the page retries the gate endpoint. Once it returns 200, the video plays fullscreen.
+
+#### Revenue aggregation
+
+Revenue on `/` and `/api/nfts` is computed by summing payment transactions received by the creator that match the note prefix:
+
+- `PayPerView for <tokenId>`
 
 ## Health check
 
